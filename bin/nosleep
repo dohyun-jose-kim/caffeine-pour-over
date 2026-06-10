@@ -1,0 +1,136 @@
+#!/bin/zsh
+# nosleep — 시간 제한부 슬립 방지 (pmset disablesleep, auto-revert)
+#
+# sudo는 /etc/sudoers.d/nosleep 의 NOPASSWD 규칙에 의존한다 (install.sh가 설치).
+# 백그라운드 watcher가 비밀번호 없이 disablesleep을 되돌릴 수 있어야 하기 때문.
+set -u
+
+STATE_FILE=/tmp/nosleep.state   # 형식: "<end_epoch> <watcher_pid>"
+
+die() { print -u2 "nosleep: $1"; exit 1 }
+
+usage() {
+  cat <<'EOF'
+Usage: nosleep [duration|command]
+
+  nosleep              60분 동안 슬립 방지
+  nosleep 90           90분 (단위 없으면 분)
+  nosleep 1h30m        h/m/s 조합 (예: 2h, 45s, 1h30m20s)
+  nosleep status       남은 시간과 pmset 상태 확인
+  nosleep extend 30m   종료 시각 연장
+  nosleep cancel       즉시 해제
+EOF
+}
+
+# duration 문자열 -> 초 (stdout). 실패 시 1 리턴.
+parse_duration() {
+  local in=$1
+  if [[ $in == <-> ]]; then
+    (( in > 0 )) || return 1
+    print $(( in * 60 ))
+    return 0
+  fi
+  if [[ -n $in && $in =~ '^([0-9]+h)?([0-9]+m)?([0-9]+s)?$' ]]; then
+    local h=${match[1]%h} m=${match[2]%m} s=${match[3]%s}
+    local total=$(( ${h:-0} * 3600 + ${m:-0} * 60 + ${s:-0} ))
+    (( total > 0 )) && { print $total; return 0 }
+  fi
+  return 1
+}
+
+# 초 -> "MM:SS" 또는 "H:MM:SS"
+fmt_hms() {
+  local t=$1
+  if (( t >= 3600 )); then
+    printf '%d:%02d:%02d' $(( t / 3600 )) $(( t % 3600 / 60 )) $(( t % 60 ))
+  else
+    printf '%02d:%02d' $(( t / 60 )) $(( t % 60 ))
+  fi
+}
+
+# 상태 파일을 읽어 END_EPOCH / WATCHER_PID 설정. 없거나 깨졌으면 1 리턴.
+read_state() {
+  [[ -f $STATE_FILE ]] || return 1
+  read -r END_EPOCH WATCHER_PID < $STATE_FILE 2>/dev/null || return 1
+  [[ ${END_EPOCH:-} == <-> && ${WATCHER_PID:-} == <-> ]]
+}
+
+watcher_alive() { kill -0 $WATCHER_PID 2>/dev/null }
+
+sleep_disabled() { [[ $(pmset -g | awk '/SleepDisabled/{print $2}') == 1 ]] }
+
+# end_epoch까지 기다렸다가 슬립을 복구하는 watcher를 띄우고 PID를 출력.
+# stdout/stderr를 끊어야 $(...) 캡처가 watcher 종료까지 매달리지 않는다.
+spawn_watcher() {
+  local end=$1
+  (
+    trap '' HUP
+    sleep $(( end - $(date +%s) ))
+    sudo -n pmset -a disablesleep 0 \
+      && rm -f $STATE_FILE \
+      && osascript -e 'display notification "Sleep re-enabled" with title "nosleep"'
+  ) >/dev/null 2>&1 &!
+  print $!
+}
+
+kill_watcher() {
+  read_state && watcher_alive && kill $WATCHER_PID 2>/dev/null
+}
+
+cmd_start() {
+  local secs
+  secs=$(parse_duration $1) || die "잘못된 시간: '$1' (예: 90, 90m, 45s, 1h30m)"
+  kill_watcher
+  sudo -n pmset -a disablesleep 1 \
+    || die "sudo 비밀번호가 필요합니다 — install.sh를 한 번 실행해 NOPASSWD 규칙을 설치하세요"
+  local end=$(( $(date +%s) + secs ))
+  local pid=$(spawn_watcher $end)
+  print "$end $pid" > $STATE_FILE
+  print "🚫💤 Sleep disabled for $(fmt_hms $secs) — until $(date -r $end +%H:%M:%S)"
+}
+
+cmd_status() {
+  if read_state && watcher_alive; then
+    local remain=$(( END_EPOCH - $(date +%s) ))
+    (( remain < 0 )) && remain=0
+    print "✓ active — $(fmt_hms $remain) remaining (until $(date -r $END_EPOCH +%H:%M:%S), watcher PID $WATCHER_PID)"
+  else
+    print "✗ no active nosleep"
+  fi
+  if sleep_disabled; then
+    print "  pmset SleepDisabled: 1"
+    if ! { read_state && watcher_alive }; then
+      print -u2 "  ⚠ watcher 없이 슬립이 꺼져 있음 — 'nosleep cancel'로 복구하세요"
+    fi
+  else
+    print "  pmset SleepDisabled: 0"
+  fi
+}
+
+cmd_extend() {
+  local secs
+  secs=$(parse_duration $1) || die "잘못된 시간: '$1' (예: 30m, 1h)"
+  read_state && watcher_alive || die "연장할 활성 nosleep이 없습니다"
+  kill $WATCHER_PID 2>/dev/null
+  local end=$(( END_EPOCH + secs ))
+  local pid=$(spawn_watcher $end)
+  print "$end $pid" > $STATE_FILE
+  print "⏩ extended — $(fmt_hms $(( end - $(date +%s) ))) remaining (until $(date -r $end +%H:%M:%S))"
+}
+
+cmd_cancel() {
+  kill_watcher
+  rm -f $STATE_FILE
+  sudo -n pmset -a disablesleep 0 \
+    || die "sudo 비밀번호가 필요합니다 — 'sudo pmset -a disablesleep 0'을 직접 실행하세요"
+  print "✓ canceled — sleep re-enabled now"
+}
+
+case ${1:-} in
+  status)         cmd_status ;;
+  cancel|off)     cmd_cancel ;;
+  extend)         cmd_extend ${2:-} ;;
+  help|-h|--help) usage ;;
+  '')             cmd_start 60 ;;
+  *)              cmd_start $1 ;;
+esac

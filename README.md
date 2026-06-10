@@ -1,4 +1,4 @@
-# 10_hand-drip
+# 10_hand-drip-caffeine
 
 손으로 내려 만든 macOS CLI 도구 모음. `bin/` 아래 스크립트를 `install.sh`가 `~/.local/bin`에 링크한다.
 

@@ -1,4 +1,4 @@
-# 10_hand-drip-caffeine
+# caffeine-pour-over
 
 손으로 내려 만든(hand-drip) macOS CLI 도구 모음. `bin/` 아래 스크립트를 `install.sh`가 `~/.local/bin`에 심볼릭 링크한다.
 
@@ -13,8 +13,8 @@
 ## 설치
 
 ```bash
-git clone https://github.com/dohyun-jose-kim/10_hand-drip-caffeine.git
-cd 10_hand-drip-caffeine
+git clone https://github.com/dohyun-jose-kim/caffeine-pour-over.git
+cd caffeine-pour-over
 ./install.sh   # sudo 비밀번호 1회 필요 (sudoers 규칙 설치)
 ```
 

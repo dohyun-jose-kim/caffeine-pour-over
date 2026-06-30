@@ -1,5 +1,5 @@
 #!/bin/bash
-# 10_hand-drip 도구 설치:
+# caffeine-pour-over 도구 설치:
 #  1. bin/* 을 ~/.local/bin 에 심볼릭 링크
 #  2. nosleep용 NOPASSWD sudoers 규칙 설치 (pmset disablesleep 두 명령만 허용)
 #  3. 꼬여 있던 disablesleep 상태 초기화

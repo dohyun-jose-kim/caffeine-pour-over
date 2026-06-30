@@ -1,8 +1,10 @@
 # caffeine-pour-over
 
+[English](README.en.md) · **한국어**
+
 손으로 내려 만든(hand-drip) macOS CLI 도구 모음. `bin/` 아래 스크립트를 `install.sh`가 `~/.local/bin`에 심볼릭 링크한다.
 
-> Hand-crafted macOS CLI tools — **nosleep** (time-boxed sleep blocker with auto-revert) and **after** (run a keystroke after a delay).
+> Hand-crafted macOS CLI tools — **nosleep** (time-boxed sleep blocker with auto-revert), **after** (run a keystroke after a delay), and **pourover** (an interactive menu launcher for them).
 
 ## 요구 사항
 
@@ -24,6 +26,24 @@ cd caffeine-pour-over
 1. `bin/*`을 `~/.local/bin`에 심볼릭 링크
 2. nosleep용 NOPASSWD sudoers 규칙 설치 (`/etc/sudoers.d/nosleep`)
 3. 꼬여 있던 `disablesleep` 상태 초기화
+
+## pourover
+
+도구 이름을 외울 필요 없이, `pourover`만 실행하면 `bin/`의 도구가 번호로 뜬다. 도구를 고르면 동작·시간·타겟까지 객관식으로 물어본 뒤 실행한다. 의존성 없는 순수 zsh 메뉴.
+
+### 사용법
+
+```
+pourover       # 도구 목록 → 동작/인자를 번호로 골라 실행
+pourover -h    # 도움말
+```
+
+`q`를 입력하면 어느 단계에서든 취소된다.
+
+### 동작 방식
+
+- `bin/`의 실행 가능한 파일을 자동으로 수집해 목록에 띄운다(자기 자신 제외). 새 도구를 `bin/`에 추가하면 메뉴에 자동으로 나타난다.
+- `nosleep`·`after`는 시간 프리셋·타겟까지 골라주는 큐레이션 메뉴를 제공한다. 그 밖의 도구는 `--help`(또는 `help`)를 보여준 뒤 인자를 직접 입력받는 폴백으로 실행된다.
 
 ## nosleep
 
@@ -97,7 +117,7 @@ after 1h5m enter                 # h/m/s 조합, 숫자만이면 분 (예: 90, 2
 
 ```bash
 sudo rm /etc/sudoers.d/nosleep
-rm ~/.local/bin/nosleep ~/.local/bin/after
+rm ~/.local/bin/nosleep ~/.local/bin/after ~/.local/bin/pourover
 ```
 
 ## 라이선스

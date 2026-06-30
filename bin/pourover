@@ -1,0 +1,116 @@
+#!/bin/zsh
+# pourover — caffeine-pour-over 도구 런처 (인터랙티브 메뉴)
+#
+# 그냥 `pourover` 실행하면 bin/ 의 도구를 번호로 나열 → 선택 → 동작/인자를
+# 객관식으로 고름 → 실행. nosleep / after 는 손으로 짠 메뉴를 제공하고,
+# 그 밖의 도구는 목록에 자동으로 등장하며 usage를 보여준 뒤 인자를 직접 입력받는다.
+set -u
+
+BIN_DIR=${0:A:h}   # 심볼릭 링크를 풀어 실제 bin/ 경로
+
+usage() {
+  cat <<'EOF'
+pourover — caffeine-pour-over 도구 런처
+
+  pourover            도구를 번호로 고르고, 동작/인자까지 객관식으로 선택해 실행
+  pourover -h|--help  이 도움말
+EOF
+}
+
+# 번호 메뉴. 프롬프트/목록은 stderr로, 고른 값만 stdout으로 낸다(=$(...) 캡처용).
+# q 또는 EOF면 1 리턴. 잘못된 입력은 다시 묻는다.
+choose() {
+  local prompt=$1; shift
+  local opts=("$@") ans i
+  while true; do
+    print -u2 "\n$prompt"
+    for i in {1..$#opts}; do print -u2 "  $i) ${opts[$i]}"; done
+    print -u2 -n "선택 (번호, q=취소): "
+    read -r ans || return 1
+    [[ $ans == q ]] && return 1
+    if [[ $ans == <-> ]] && (( ans >= 1 && ans <= $#opts )); then
+      print -r -- "${opts[$ans]}"; return 0
+    fi
+    print -u2 "  ⚠ 잘못된 선택: '$ans'"
+  done
+}
+
+# 시간 프리셋 + 직접 입력
+pick_duration() {
+  local c
+  c=$(choose "시간 선택:" "30m" "1h" "2h" "3h" "직접 입력") || return 1
+  if [[ $c == "직접 입력" ]]; then
+    print -u2 -n "시간 입력 (예: 90, 1h30m, 45s): "
+    read -r c || return 1
+  fi
+  print -r -- "$c"
+}
+
+run_cmd() {
+  print -u2 "\n→ 실행: $*\n"
+  "$@"
+}
+
+menu_nosleep() {
+  local action dur
+  action=$(choose "nosleep — 동작 선택:" \
+    "start (타이머 시작)" "status (남은 시간)" "extend (연장)" "cancel (즉시 해제)") || return 1
+  case $action in
+    start*)  dur=$(pick_duration) || return 1; run_cmd "$BIN_DIR/nosleep" "$dur" ;;
+    status*) run_cmd "$BIN_DIR/nosleep" status ;;
+    extend*) dur=$(pick_duration) || return 1; run_cmd "$BIN_DIR/nosleep" extend "$dur" ;;
+    cancel*) run_cmd "$BIN_DIR/nosleep" cancel ;;
+  esac
+}
+
+menu_after() {
+  local dur target
+  dur=$(pick_duration) || return 1
+  target=$(choose "Enter를 보낼 타겟:" \
+    "frontmost (맨 앞 창)" "iterm (지금 이 iTerm2 세션)") || return 1
+  case $target in
+    frontmost*) run_cmd "$BIN_DIR/after" "$dur" enter ;;
+    iterm*)     run_cmd "$BIN_DIR/after" "$dur" enter --target iterm ;;
+  esac
+}
+
+# 큐레이션 메뉴가 없는 도구: usage 보여주고 인자를 직접 입력받아 실행
+menu_generic() {
+  local tool=$1 args
+  print -u2 "\n── $tool 사용법 ──"
+  "$BIN_DIR/$tool" --help 2>&1 || "$BIN_DIR/$tool" help 2>&1 || true
+  print -u2 -n "\n인자 입력 (그대로 실행, 빈 입력=인자 없음): "
+  read -r args || return 1
+  run_cmd "$BIN_DIR/$tool" ${=args}
+}
+
+# bin/ 의 실행 가능한 파일을 수집(자기 자신 제외). 알파벳순.
+collect_tools() {
+  local f b
+  tools=()
+  for f in "$BIN_DIR"/*(N.); do
+    [[ -x $f ]] || continue
+    b=${f:t}
+    [[ $b == pourover ]] && continue
+    tools+=$b
+  done
+}
+
+case ${1:-} in
+  -h|--help|help) usage; exit 0 ;;
+  '') ;;
+  *)  print -u2 "pourover: 알 수 없는 인자 '$1' — 인자 없이 'pourover' 만 실행하세요"; exit 1 ;;
+esac
+
+typeset -a tools
+collect_tools
+(( $#tools )) || { print -u2 "pourover: bin/ 에 실행 가능한 도구가 없습니다"; exit 1 }
+
+print "☕ caffeine-pour-over"
+tool=$(choose "도구 선택:" $tools) || { print "취소됨."; exit 0 }
+
+case $tool in
+  nosleep) menu_nosleep ;;
+  after)   menu_after ;;
+  *)       menu_generic "$tool" ;;
+esac

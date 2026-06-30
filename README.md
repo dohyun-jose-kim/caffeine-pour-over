@@ -2,13 +2,14 @@
 
 손으로 내려 만든(hand-drip) macOS CLI 도구 모음. `bin/` 아래 스크립트를 `install.sh`가 `~/.local/bin`에 심볼릭 링크한다.
 
-> Hand-crafted macOS CLI tools. Currently ships **nosleep** — a time-boxed sleep blocker with auto-revert.
+> Hand-crafted macOS CLI tools — **nosleep** (time-boxed sleep blocker with auto-revert) and **after** (run a keystroke after a delay).
 
 ## 요구 사항
 
 - macOS (`pmset`, `osascript` 사용)
 - zsh
 - `~/.local/bin`이 `PATH`에 포함되어 있을 것
+- (선택) iTerm2 — `after --target iterm`을 쓸 때
 
 ## 설치
 
@@ -60,11 +61,43 @@ nosleep cancel       # 즉시 해제
 - `disablesleep`은 NVRAM 설정이라 **재부팅해도 유지**되는데 watcher는 재부팅하면 사라진다.
   타이머 도중 재부팅했다면 `nosleep status`가 ⚠ 경고를 띄우니 `nosleep cancel`로 복구할 것.
 
+## after
+
+지정한 시간이 지나면 **액션 1회**를 실행하는 예약 도구. nosleep과 같은 disown 패턴이라 터미널을 닫아도 예약이 살아남는다. 지금은 `enter`(Return 키 전송) 액션을 지원한다.
+
+> **쓰는 맥락** — 예: Claude 세션이 사용량 한도에 걸려 ~1시간 기다려야 할 때, `nosleep 3h`로 Mac을 깨워두고 `after 65m enter`로 재개 Enter를 미리 예약한다.
+
+### 사용법
+
+```
+after 65m enter                  # 65분 뒤 맨 앞 창에 Enter (frontmost, 기본)
+after 65m enter --target iterm   # 지금 이 iTerm2 세션에 Enter (포커스 무관)
+after 1h5m enter                 # h/m/s 조합, 숫자만이면 분 (예: 90, 2h, 30s)
+```
+
+예약하면 발사 시각과 pid를 출력한다. **취소**는 그 pid를 `kill`.
+
+### 타겟 두 가지
+
+- **`frontmost`** (기본) — 발사 시점에 **맨 앞** 앱으로 Enter를 보낸다(System Events). 가장 간단하지만 그 순간 대상 창이 맨 앞 + 터미널에 포커스돼 있어야 한다. VS Code 통합 터미널처럼 외부 입력 주입 API가 없는 환경이 여기 해당 — 자리 비울 때 그 창을 맨 앞에 둔 채 두면 된다. 첫 실행 시 **Accessibility 권한** 필요.
+- **`iterm`** — **예약하는 순간**의 iTerm2 현재 세션을 id로 붙잡아 두었다가, 발사 때 그 세션에 직접 쓴다. 포커스·맨앞과 무관하게 정확하다. 반드시 **그 iTerm2 세션에서 실행**할 것. 첫 실행 시 **자동화(Apple Events) 권한** 필요.
+
+### 동작 방식
+
+- 예약 즉시 disown된 백그라운드 프로세스가 떠서 `sleep` 후 액션을 1회 실행한다. 상태 파일 없음 (fire-once).
+- `--target iterm`은 예약 순간의 iTerm2 현재 세션 id를 캡처해 두었다가, 발사 때 모든 창/탭/세션을 훑어 그 id로 다시 찾아 입력한다.
+
+### 한계
+
+- `frontmost`는 발사 순간 다른 창이 포커스를 가져갔으면 엉뚱한 곳에 Enter가 간다 — 정확함이 필요하면 `iterm`을 쓸 것.
+- 권한(Accessibility/자동화)이 거부돼 있으면 조용히 실패한다(Enter가 안 감). 한 번 허용해 두면 이후엔 자동.
+- 대기 중 시스템이 실제로 잠들면 발사가 그만큼 늦어진다 — `nosleep`을 같이 걸어두면 해결된다.
+
 ## 제거
 
 ```bash
 sudo rm /etc/sudoers.d/nosleep
-rm ~/.local/bin/nosleep
+rm ~/.local/bin/nosleep ~/.local/bin/after
 ```
 
 ## 라이선스

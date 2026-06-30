@@ -1,0 +1,133 @@
+#!/bin/zsh
+# after — 지정 시간 뒤 액션 1회 예약 (disown된 백그라운드, 터미널 닫혀도 생존)
+#
+# 지금 지원하는 액션: enter (지정 타겟에 Return 1회)
+# 타겟:
+#   frontmost (기본) — System Events로 맨 앞 앱에 Return. 예약 시점이 아니라
+#                      발사 시점에 맨 앞인 창으로 감. Accessibility 권한 필요.
+#   iterm            — "지금 이 iTerm2 세션"을 id로 붙잡아 발사 때 그 세션에 입력.
+#                      포커스/맨앞 무관하게 정확. iTerm2 자동화 권한 필요.
+#
+# 용례: 클로드 쿨다운 대기 — `nosleep 3h` 로 안 잠들게 하고
+#       `after 65m enter` 로 재개 Enter를 예약.
+set -u
+
+die() { print -u2 "after: $1"; exit 1 }
+
+usage() {
+  cat <<'EOF'
+Usage: after <duration> enter [--target frontmost|iterm]
+
+  after 65m enter                  65분 뒤 맨 앞 창에 Enter
+  after 1h5m enter --target iterm  지금 이 iTerm2 세션에 Enter (포커스 무관)
+  after 30s enter                  h/m/s 조합, 숫자만이면 분 (예: 90, 2h, 1h5m)
+
+  취소: 예약 시 출력되는 pid를 kill.
+EOF
+}
+
+# duration 문자열 -> 초 (stdout). 실패 시 1. (nosleep과 동일 규칙)
+parse_duration() {
+  local in=$1
+  if [[ $in == <-> ]]; then
+    (( in > 0 )) || return 1
+    print $(( in * 60 )); return 0
+  fi
+  if [[ -n $in && $in =~ '^([0-9]+h)?([0-9]+m)?([0-9]+s)?$' ]]; then
+    local h=${match[1]%h} m=${match[2]%m} s=${match[3]%s}
+    local total=$(( ${h:-0} * 3600 + ${m:-0} * 60 + ${s:-0} ))
+    (( total > 0 )) && { print $total; return 0 }
+  fi
+  return 1
+}
+
+# 초 -> "MM:SS" / "H:MM:SS" (nosleep과 동일)
+fmt_hms() {
+  local t=$1
+  if (( t >= 3600 )); then
+    printf '%d:%02d:%02d' $(( t / 3600 )) $(( t % 3600 / 60 )) $(( t % 60 ))
+  else
+    printf '%02d:%02d' $(( t / 60 )) $(( t % 60 ))
+  fi
+}
+
+send_enter_frontmost() {
+  osascript -e 'tell application "System Events" to key code 36'
+}
+
+# 예약 시점에 잡아둔 iTerm2 세션 id로 그 세션에 Return.
+send_enter_iterm() {
+  local sid=$1
+  osascript - "$sid" <<'APPLESCRIPT'
+on run argv
+  set targetID to item 1 of argv
+  tell application "iTerm2"
+    repeat with w in windows
+      repeat with t in tabs of w
+        repeat with s in sessions of t
+          if (id of s as text) is targetID then
+            tell s to write text "" newline yes
+            return
+          end if
+        end repeat
+      end repeat
+    end repeat
+  end tell
+end run
+APPLESCRIPT
+}
+
+# --- 인자 파싱 ---
+case ${1:-} in
+  ''|help|-h|--help) usage; exit 0 ;;
+esac
+
+dur=$1
+action=${2:-}
+[[ -n $action ]] || die "액션이 필요합니다 (예: after 65m enter)"
+shift 2
+
+target=frontmost
+while (( $# )); do
+  case $1 in
+    --target) target=${2:-}; [[ -n $target ]] || die "--target 값 누락"; shift 2 ;;
+    *)        die "알 수 없는 옵션: '$1'" ;;
+  esac
+done
+
+[[ $action == enter ]] || die "지원 액션: enter (받음: '$action')"
+
+secs=$(parse_duration $dur) || die "잘못된 시간: '$dur' (예: 65m, 1h5m, 30s, 90)"
+
+# iterm 타겟이면 '지금' 세션 id를 캡처해 둔다 (발사 때 이 id로 다시 찾음).
+sid=""
+case $target in
+  frontmost) ;;
+  iterm)
+    sid=$(osascript -e 'tell application "iTerm2" to id of current session of current window' 2>/dev/null) \
+      || die "iTerm2 세션 id를 못 읽음 — iTerm2에서 실행했는지/자동화 권한을 줬는지 확인"
+    [[ -n $sid ]] || die "iTerm2가 실행 중이 아니거나 현재 세션이 없음"
+    ;;
+  *) die "알 수 없는 타겟: '$target' (frontmost | iterm)" ;;
+esac
+
+end=$(( $(date +%s) + secs ))
+
+# disown된 백그라운드 예약: 자고 일어나 한 번 실행. 터미널 닫혀도 생존.
+(
+  trap '' HUP
+  sleep $secs
+  case $target in
+    frontmost) send_enter_frontmost ;;
+    iterm)     send_enter_iterm "$sid" ;;
+  esac
+  osascript -e "display notification \"Enter sent → $target\" with title \"after\""
+) >/dev/null 2>&1 &!
+pid=$!
+
+print "⏰ scheduled — Enter → $target in $(fmt_hms $secs) (at $(date -r $end +%H:%M:%S), pid $pid)"
+case $target in
+  frontmost) print "   ⓘ 발사 시 대상 창이 맨 앞 + 터미널 포커스여야 함 · 첫 실행 시 Accessibility 권한 필요" ;;
+  iterm)     print "   ⓘ 포커스 무관하게 잡아둔 iTerm2 세션으로 전송 · 첫 실행 시 자동화 권한 필요" ;;
+esac
+print "   취소: kill $pid"

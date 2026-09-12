@@ -80,9 +80,11 @@ kill_watcher() {
 cmd_start() {
   local secs
   secs=$(parse_duration $1) || die "잘못된 시간: '$1' (예: 90, 90m, 45s, 1h30m)"
-  kill_watcher
+  # pmset이 성공한 뒤에 기존 watcher를 교체한다. 순서가 반대면 시작에 실패했을 때
+  # 이전 세션의 auto-revert만 사라지고 슬립은 꺼진 채로 남는다.
   sudo -n pmset -a disablesleep 1 \
     || die "sudo 비밀번호가 필요합니다 — install.sh를 한 번 실행해 NOPASSWD 규칙을 설치하세요"
+  kill_watcher
   local end=$(( $(date +%s) + secs ))
   local pid=$(spawn_watcher $end)
   print "$end $pid" > $STATE_FILE

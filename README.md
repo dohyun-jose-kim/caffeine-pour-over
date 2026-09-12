@@ -36,6 +36,7 @@ cd caffeine-pour-over
 ```
 pourover       # 도구 목록 → 동작/인자를 번호로 골라 실행
 pourover -h    # 도움말
+pourover --version  # 버전
 ```
 
 `q`를 입력하면 어느 단계에서든 취소된다.
@@ -67,11 +68,12 @@ nosleep 1h30m        # h/m/s 조합 (예: 2h, 45s, 1h30m20s)
 nosleep status       # 남은 시간 + pmset 상태
 nosleep extend 30m   # 연장
 nosleep cancel       # 즉시 해제
+nosleep --version    # 버전
 ```
 
 ### 동작 방식
 
-- 시작 시 종료 시각(epoch)과 watcher PID를 `/tmp/nosleep.state`에 기록 — `status`의 남은 시간은 여기서 계산.
+- 시작 시 종료 시각(epoch)과 watcher PID를 `$TMPDIR/nosleep.state`(사용자 전용 디렉터리)에 기록 — `status`의 남은 시간은 여기서 계산.
 - 복구는 `sudo -n pmset`으로 실행되므로 `/etc/sudoers.d/nosleep`의 NOPASSWD 규칙이 필수.
   규칙은 `pmset -a disablesleep 1`/`0` 두 명령에만 한정된다.
   (예전 zshrc 함수 버전은 sudo 캐시 5분 만료 때문에 5분 넘는 타이머가 전부 복구에 실패했다 — 이 규칙이 그 버그의 근본 수정.)
@@ -93,6 +95,7 @@ nosleep cancel       # 즉시 해제
 after 65m enter                  # 65분 뒤 맨 앞 창에 Enter (frontmost, 기본)
 after 65m enter --target iterm   # 지금 이 iTerm2 세션에 Enter (포커스 무관)
 after 1h5m enter                 # h/m/s 조합, 숫자만이면 분 (예: 90, 2h, 30s)
+after --version                  # 버전
 ```
 
 예약하면 발사 시각과 pid를 출력한다. **취소**는 그 pid를 `kill`.
@@ -112,6 +115,25 @@ after 1h5m enter                 # h/m/s 조합, 숫자만이면 분 (예: 90, 2
 - `frontmost`는 발사 순간 다른 창이 포커스를 가져갔으면 엉뚱한 곳에 Enter가 간다 — 정확함이 필요하면 `iterm`을 쓸 것.
 - 권한(Accessibility/자동화)이 거부돼 있으면 조용히 실패한다(Enter가 안 감). 한 번 허용해 두면 이후엔 자동.
 - 대기 중 시스템이 실제로 잠들면 발사가 그만큼 늦어진다 — `nosleep`을 같이 걸어두면 해결된다.
+
+## 버전
+
+`VERSION` 파일 한 줄이 단일 진실이고, 세 도구가 모두 그 파일을 읽는다.
+
+```
+$ nosleep --version
+nosleep (caffeine-pour-over) 1.3.0
+```
+
+`install.sh`가 심볼릭 링크를 걸기 때문에 **저장소의 체크아웃 상태가 곧 설치 버전**이다.
+릴리스 태그를 벗어난 커밋을 체크아웃해 두면 그 사실이 버전에 드러난다.
+
+```
+$ nosleep --version
+nosleep (caffeine-pour-over) 1.3.0+dev.aa66d77
+```
+
+`after --version`·`pourover --version`도 같은 형식이며, `pourover` 헤더에도 버전이 뜬다.
 
 ## 제거
 

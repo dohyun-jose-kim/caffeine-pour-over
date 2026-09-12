@@ -12,6 +12,9 @@ LOG_FILE=${TMPDIR:-/tmp}/nosleep.log       # 되돌림 실패만 기록 (정상 
 
 # watcher 신원 확인용. zsh는 함수 안에서 $0이 함수명이 되므로 톱레벨에서 잡아둔다.
 SELF=${0:t}
+# 저장소 루트. ${0:A}가 심볼릭 링크를 풀어주므로 ~/.local/bin 경유로 실행해도
+# 실제 체크아웃을 가리킨다. $0 이유는 위와 같아 톱레벨에서 잡는다.
+ROOT=${0:A:h:h}
 
 die() { print -u2 "nosleep: $1"; exit 1 }
 
@@ -25,7 +28,23 @@ Usage: nosleep [duration|command]
   nosleep status       남은 시간과 pmset 상태 확인
   nosleep extend 30m   종료 시각 연장
   nosleep cancel       즉시 해제
+  nosleep --version    버전 출력
 EOF
+}
+
+# VERSION 파일이 단일 진실. 3개 스크립트에 버전을 하드코딩하면 반드시 어긋난다.
+# 태그를 벗어난 체크아웃이면 +dev.<sha>를 붙여, 릴리스를 쓰는지 작업 중인
+# 브랜치를 쓰는지 구분되게 한다.
+version_string() {
+  local ver sha
+  ver=$(<$ROOT/VERSION) 2>/dev/null || { print -r -- unknown; return }
+  ver=${ver//[[:space:]]/}
+  [[ -n $ver ]] || { print -r -- unknown; return }
+  if sha=$(command git -C $ROOT rev-parse --short HEAD 2>/dev/null); then
+    command git -C $ROOT describe --exact-match --match "v$ver" HEAD >/dev/null 2>&1 \
+      || ver="$ver+dev.$sha"
+  fi
+  print -r -- $ver
 }
 
 # duration 문자열 -> 초 (stdout). 실패 시 1 리턴.
@@ -175,6 +194,7 @@ case ${1:-} in
   cancel|off)     cmd_cancel ;;
   extend)         cmd_extend ${2:-} ;;
   help|-h|--help) usage ;;
+  --version|-V)   print "nosleep (caffeine-pour-over) $(version_string)" ;;
   '')             cmd_start 60 ;;
   *)              cmd_start $1 ;;
 esac

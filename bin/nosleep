@@ -126,8 +126,11 @@ cmd_start() {
   print "🚫💤 Sleep disabled for $(fmt_hms $secs) — until $(date -r $end +%H:%M:%S)"
 }
 
+# 종료 코드: 0=활성, 1=비활성, 2=watcher 없이 disablesleep이 켜져 있음(⚠)
 cmd_status() {
+  local rc=1
   if read_state && watcher_alive; then
+    rc=0
     local remain=$(( END_EPOCH - $(date +%s) ))
     (( remain < 0 )) && remain=0
     print "✓ active — $(fmt_hms $remain) remaining (until $(date -r $END_EPOCH +%H:%M:%S), watcher PID $WATCHER_PID)"
@@ -138,10 +141,12 @@ cmd_status() {
     print "  pmset SleepDisabled: 1"
     if ! { read_state && watcher_alive }; then
       print -u2 "  ⚠ watcher 없이 슬립이 꺼져 있음 — 'nosleep cancel'로 복구하세요"
+      rc=2
     fi
   else
     print "  pmset SleepDisabled: 0"
   fi
+  return $rc
 }
 
 cmd_extend() {

@@ -12,6 +12,10 @@
 #       `after 65m enter` 로 재개 Enter를 예약.
 set -u
 
+# 저장소 루트. ${0:A}가 심볼릭 링크를 풀어주므로 ~/.local/bin 경유로 실행해도
+# 실제 체크아웃을 가리킨다. 함수 안에서는 $0 이 함수명이 되므로 톱레벨에서 잡는다.
+ROOT=${0:A:h:h}
+
 die() { print -u2 "after: $1"; exit 1 }
 
 usage() {
@@ -22,8 +26,25 @@ Usage: after <duration> enter [--target frontmost|iterm]
   after 1h5m enter --target iterm  지금 이 iTerm2 세션에 Enter (포커스 무관)
   after 30s enter                  h/m/s 조합, 숫자만이면 분 (예: 90, 2h, 1h5m)
 
+  after --version                  버전 출력
+
   취소: 예약 시 출력되는 pid를 kill.
 EOF
+}
+
+# VERSION 파일이 단일 진실. 3개 스크립트에 버전을 하드코딩하면 반드시 어긋난다.
+# 태그를 벗어난 체크아웃이면 +dev.<sha>를 붙여, 릴리스를 쓰는지 작업 중인
+# 브랜치를 쓰는지 구분되게 한다.
+version_string() {
+  local ver sha
+  ver=$(<$ROOT/VERSION) 2>/dev/null || { print -r -- unknown; return }
+  ver=${ver//[[:space:]]/}
+  [[ -n $ver ]] || { print -r -- unknown; return }
+  if sha=$(command git -C $ROOT rev-parse --short HEAD 2>/dev/null); then
+    command git -C $ROOT describe --exact-match --match "v$ver" HEAD >/dev/null 2>&1 \
+      || ver="$ver+dev.$sha"
+  fi
+  print -r -- $ver
 }
 
 # duration 문자열 -> 초 (stdout). 실패 시 1. (nosleep과 동일 규칙)
@@ -80,6 +101,7 @@ APPLESCRIPT
 # --- 인자 파싱 ---
 case ${1:-} in
   ''|help|-h|--help) usage; exit 0 ;;
+  --version|-V)      print "after (caffeine-pour-over) $(version_string)"; exit 0 ;;
 esac
 
 dur=$1

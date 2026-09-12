@@ -7,6 +7,7 @@
 set -u
 
 BIN_DIR=${0:A:h}   # 심볼릭 링크를 풀어 실제 bin/ 경로
+ROOT=${BIN_DIR:h}  # 저장소 루트 (VERSION 파일 위치)
 
 usage() {
   cat <<'EOF'
@@ -14,7 +15,23 @@ pourover — caffeine-pour-over 도구 런처
 
   pourover            도구를 번호로 고르고, 동작/인자까지 객관식으로 선택해 실행
   pourover -h|--help  이 도움말
+  pourover --version  버전 출력
 EOF
+}
+
+# VERSION 파일이 단일 진실. 3개 스크립트에 버전을 하드코딩하면 반드시 어긋난다.
+# 태그를 벗어난 체크아웃이면 +dev.<sha>를 붙여, 릴리스를 쓰는지 작업 중인
+# 브랜치를 쓰는지 구분되게 한다.
+version_string() {
+  local ver sha
+  ver=$(<$ROOT/VERSION) 2>/dev/null || { print -r -- unknown; return }
+  ver=${ver//[[:space:]]/}
+  [[ -n $ver ]] || { print -r -- unknown; return }
+  if sha=$(command git -C $ROOT rev-parse --short HEAD 2>/dev/null); then
+    command git -C $ROOT describe --exact-match --match "v$ver" HEAD >/dev/null 2>&1 \
+      || ver="$ver+dev.$sha"
+  fi
+  print -r -- $ver
 }
 
 # 번호 메뉴. 프롬프트/목록은 stderr로, 고른 값만 stdout으로 낸다(=$(...) 캡처용).
@@ -98,6 +115,7 @@ collect_tools() {
 
 case ${1:-} in
   -h|--help|help) usage; exit 0 ;;
+  -V|--version)   print "pourover (caffeine-pour-over) $(version_string)"; exit 0 ;;
   '') ;;
   *)  print -u2 "pourover: 알 수 없는 인자 '$1' — 인자 없이 'pourover' 만 실행하세요"; exit 1 ;;
 esac
@@ -106,7 +124,7 @@ typeset -a tools
 collect_tools
 (( $#tools )) || { print -u2 "pourover: bin/ 에 실행 가능한 도구가 없습니다"; exit 1 }
 
-print "☕ caffeine-pour-over"
+print "☕ caffeine-pour-over $(version_string)"
 tool=$(choose "도구 선택:" $tools) || { print "취소됨."; exit 0 }
 
 case $tool in

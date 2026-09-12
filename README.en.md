@@ -36,6 +36,7 @@ No need to memorize tool names — just run `pourover` and the tools under `bin/
 ```
 pourover       # tool list → pick action/args by number, then run
 pourover -h    # help
+pourover --version  # version
 ```
 
 Type `q` to cancel at any step.
@@ -67,11 +68,12 @@ nosleep 1h30m        # h/m/s combo (e.g. 2h, 45s, 1h30m20s)
 nosleep status       # time remaining + pmset state
 nosleep extend 30m   # extend
 nosleep cancel       # revert now
+nosleep --version    # version
 ```
 
 ### How it works
 
-- On start it records the end time (epoch) and watcher PID in `/tmp/nosleep.state` — `status` computes the remaining time from there.
+- On start it records the end time (epoch) and watcher PID in `$TMPDIR/nosleep.state` (a per-user directory) — `status` computes the remaining time from there.
 - The revert runs via `sudo -n pmset`, so the NOPASSWD rule in `/etc/sudoers.d/nosleep` is required. The rule is limited to just the two commands `pmset -a disablesleep 1`/`0`.
   (The old zshrc-function version failed to revert any timer longer than 5 minutes because the sudo credential cache expired — this rule is the root-cause fix.)
 
@@ -91,6 +93,7 @@ Schedules a **single action** to run after a delay. Like nosleep, it uses a diso
 after 65m enter                  # Enter to the frontmost window in 65 min (frontmost, default)
 after 65m enter --target iterm   # Enter to this iTerm2 session (focus-independent)
 after 1h5m enter                 # h/m/s combo, bare number = minutes (e.g. 90, 2h, 30s)
+after --version                  # version
 ```
 
 Scheduling prints the fire time and a pid. **Cancel** by `kill`-ing that pid.
@@ -110,6 +113,26 @@ Scheduling prints the fire time and a pid. **Cancel** by `kill`-ing that pid.
 - `frontmost` sends Enter to the wrong place if another window grabbed focus by fire time — use `iterm` when accuracy matters.
 - If the permission (Accessibility/Automation) is denied, it fails silently (no Enter). Grant it once and it's automatic afterward.
 - If the system actually sleeps while waiting, the fire is delayed by that much — pair it with `nosleep` to avoid this.
+
+## Version
+
+A single line in the `VERSION` file is the source of truth; all three tools read it.
+
+```
+$ nosleep --version
+nosleep (caffeine-pour-over) 1.3.0
+```
+
+Because `install.sh` symlinks the scripts, **the repo's checkout state is the installed
+version**. If you check out a commit past the release tag, the version says so.
+
+```
+$ nosleep --version
+nosleep (caffeine-pour-over) 1.3.0+dev.aa66d77
+```
+
+`after --version` and `pourover --version` use the same format, and `pourover` shows the
+version in its header too.
 
 ## Uninstall
 

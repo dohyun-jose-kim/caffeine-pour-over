@@ -8,6 +8,7 @@ set -u
 # macOS의 $TMPDIR은 사용자 전용 디렉터리(drwx------)라 전역 쓰기 가능한 /tmp와 달리
 # 남이 state를 조작해 엉뚱한 PID를 kill시키는 경로가 없다.
 STATE_FILE=${TMPDIR:-/tmp}/nosleep.state   # 형식: "<end_epoch> <watcher_pid> <nonce>"
+LOG_FILE=${TMPDIR:-/tmp}/nosleep.log       # 되돌림 실패만 기록 (정상 동작은 무기록)
 
 # watcher 신원 확인용. zsh는 함수 안에서 $0이 함수명이 되므로 톱레벨에서 잡아둔다.
 SELF=${0:t}
@@ -90,9 +91,15 @@ spawn_watcher() {
     # 자고 일어나는 사이에 cancel/extend/새 세션이 주인을 바꿨을 수 있다.
     # nonce가 내 것이 아니면 지금 슬립을 끄는 건 남의 세션을 깨는 짓이다.
     read_state && [[ $NONCE == $nonce ]] || exit 0
-    sudo -n pmset -a disablesleep 0 \
-      && rm -f $STATE_FILE \
-      && osascript -e 'display notification "Sleep re-enabled" with title "nosleep"'
+    if sudo -n pmset -a disablesleep 0; then
+      rm -f $STATE_FILE
+      osascript -e 'display notification "Sleep re-enabled" with title "nosleep"'
+    else
+      # 복구 실패를 조용히 넘기면 "알림이 안 왔다"와 "아직 안 끝났다"를
+      # 구분할 수 없다. state는 일부러 남긴다 — status가 계속 ⚠를 띄워야 한다.
+      print -r -- "$(date '+%F %T') revert FAILED — sudo -n pmset (sudoers 규칙 확인)" >> $LOG_FILE
+      osascript -e 'display notification "복구 실패 — sudo pmset -a disablesleep 0 을 직접 실행하세요" with title "nosleep ⚠"'
+    fi
   ) >/dev/null 2>&1 &!
   print $!
 }

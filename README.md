@@ -70,6 +70,9 @@ nosleep extend 30m   # 연장
 nosleep cancel       # 즉시 해제
 nosleep --version    # 버전
 ```
+### 예시 
+<img width="585" height="492" alt="image" src="https://github.com/user-attachments/assets/7182a0a5-0310-4a0f-a398-3b9395bc5543" />
+
 
 ### 동작 방식
 

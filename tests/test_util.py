@@ -31,3 +31,20 @@ def test_audit_log_is_jsonl_and_separates_error(tmp_path: Path) -> None:
     record = json.loads(log.path.read_text(encoding="utf-8"))
     assert record["error"] == "safe message"
     assert record["context"] == {"stage": "probe"}
+
+
+def test_audit_log_redacts_prompts_bodies_and_credentials(tmp_path: Path) -> None:
+    log = AuditLog(tmp_path / "paper", "read")
+    log.event(
+        "FAILED",
+        "FAILED",
+        prompt="entire paper",
+        document_body="private body",
+        api_key="sk-abcdefghijk",
+        error="Bearer secret-token sk-abcdefghijk",
+    )
+    text = log.path.read_text(encoding="utf-8")
+    assert "entire paper" not in text
+    assert "private body" not in text
+    assert "sk-abcdefghijk" not in text
+    assert "secret-token" not in text

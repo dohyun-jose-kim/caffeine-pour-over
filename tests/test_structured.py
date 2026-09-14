@@ -41,6 +41,15 @@ class FailsOnceMinerU(FakeMinerU):
         super().run(pdf, output)
 
 
+class MissingAssetMinerU(FakeMinerU):
+    def run(self, pdf: Path, output: Path) -> None:
+        document_dir = output / "document"
+        document_dir.mkdir(parents=True)
+        (document_dir / "paper.md").write_text("# Paper\n\n![missing](missing.png)\n")
+        content = [{"type": "image", "img_path": "missing.png", "page_idx": 0}]
+        (document_dir / "paper_content_list.json").write_text(json.dumps(content))
+
+
 def source_pdf(path: Path) -> Path:
     document = pymupdf.open()
     page = document.new_page(width=600, height=800)
@@ -63,6 +72,7 @@ def test_structured_ingest_materializes_assets_and_completes_revision(tmp_path: 
         "PRESERVED", "CROPPED_FROM_SOURCE", "CROPPED_FROM_SOURCE"
     ]
     structured = (paper_dir / "02_structured.md").read_text(encoding="utf-8")
+    assert "<!-- PAGE: 1 -->" in structured
     assert "assets/figures/fig_001.png" in structured
     assert "### FIG-0001" in structured
     assert (paper_dir / "assets" / "tables" / "table_001.png").exists()
@@ -95,3 +105,14 @@ def test_failed_structured_stage_resumes_same_incomplete_revision(tmp_path: Path
     assert changed
     assert manifest["active_revision"] == "r0001"
     assert manifest["revision_status"] == "COMPLETE"
+
+
+def test_missing_visual_metadata_remains_explicit(tmp_path: Path) -> None:
+    source = source_pdf(tmp_path / "source.pdf")
+    paper_dir, _, _ = ingest_native(
+        source, tmp_path / "papers", extractor=FakeExtractor(["native"])
+    )
+    manifest, _ = ingest_structured(paper_dir, MissingAssetMinerU())
+    assert manifest["assets"][0]["status"] == "MISSING"
+    assert manifest["assets"][0]["path"] is None
+    assert "Status: MISSING" in (paper_dir / "02_structured.md").read_text()

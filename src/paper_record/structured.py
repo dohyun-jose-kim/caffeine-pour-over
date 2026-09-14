@@ -14,7 +14,7 @@ from .util import atomic_write_text, sha256_file, sha256_text, utc_now
 
 
 STRUCTURED_OPTIONS = {
-    "adapter_revision": 1,
+    "adapter_revision": 2,
     "backend": "hybrid-engine",
     "effort": "high",
     "method": "auto",
@@ -163,6 +163,7 @@ def normalize_output(
     content_path = _choose_content_list(raw)
     markdown = markdown_path.read_text(encoding="utf-8")
     entries = _load_entries(content_path) if content_path else []
+    markdown = _insert_page_markers(markdown, entries)
     asset_root = revision_dir / "assets"
     assets, replacements = _materialize_assets(entries, raw, pdf, asset_root)
     for old, new in sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True):
@@ -229,6 +230,36 @@ def _load_entries(path: Path) -> list[dict[str, Any]]:
             elif isinstance(item, dict):
                 entries.append(item)
     return entries
+
+
+def _insert_page_markers(markdown: str, entries: list[dict[str, Any]]) -> str:
+    """Add best-effort page boundaries from MinerU's ordered content list."""
+    pages = sorted({item["page_idx"] for item in entries if isinstance(item.get("page_idx"), int)})
+    if not pages or "<!-- PAGE:" in markdown:
+        return markdown
+    positions: dict[int, int] = {}
+    cursor = 0
+    for page_index in pages:
+        page_entries = [item for item in entries if item.get("page_idx") == page_index]
+        position = None
+        for item in page_entries:
+            candidates = [item.get("text"), _find_image_path(item)]
+            for candidate in candidates:
+                if isinstance(candidate, str) and candidate:
+                    found = markdown.find(candidate, cursor)
+                    if found >= 0:
+                        position = markdown.rfind("\n", 0, found) + 1
+                        cursor = found + len(candidate)
+                        break
+            if position is not None:
+                break
+        positions[page_index] = position if position is not None else cursor
+    result = markdown
+    for page_index in reversed(pages):
+        position = positions[page_index]
+        marker = f"<!-- PAGE: {page_index + 1} -->\n"
+        result = result[:position] + marker + result[position:]
+    return result
 
 
 def _materialize_assets(
@@ -361,4 +392,3 @@ def _crop_pdf(pdf: Path, page_number: int, bbox: Any, destination: Path) -> bool
         destination.parent.mkdir(parents=True, exist_ok=True)
         page.get_pixmap(matrix=pymupdf.Matrix(2, 2), clip=clip, alpha=False).save(destination)
         return True
-

@@ -7,8 +7,8 @@ def test_schema_command(capsys) -> None:
 
 
 def test_future_command_has_explicit_exit(capsys, tmp_path) -> None:
-    assert main(["resolve", str(tmp_path), "UNRESOLVED-0001"]) == 2
-    assert "not implemented yet" in capsys.readouterr().err
+    assert main(["resolve", str(tmp_path), "UNRESOLVED-0001"]) == 1
+    assert "requires explicit" in capsys.readouterr().err
 
 
 def test_whole_rejection_immediately_enters_item_review(monkeypatch, tmp_path) -> None:

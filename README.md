@@ -6,7 +6,95 @@
 
 > Hand-crafted macOS CLI tools — **nosleep** (time-boxed sleep blocker with auto-revert), **after** (run a keystroke after a delay), and **pourover** (an interactive menu launcher for them).
 
-## 요구 사항
+## paper-record: 3-Layer Paper Record
+
+`paper-record`는 PDF를 한 가지 parser 결과로 합치지 않는다. 원본을 과학적 source of truth로
+보존하고, 서로 독립적인 두 표현과 사람이 승인한 누적 읽기 기록을 만든다.
+
+```text
+paper.pdf                 원본 근거(항상 최종 권위)
+├── 01_native.md          PyMuPDF4LLM text-layer 보존본
+├── 02_structured.md      MinerU Hybrid 구조/layout 보존본
+└── 03_canonical.md       LLM 제안 중 사람이 승인한 누적 working record
+```
+
+두 parser가 일치하면 `CROSS_CHECKED`일 뿐 사실 확정은 아니다. 충돌은 자동으로 승자를
+고르지 않고 `UNRESOLVED`로 남긴다. `SOURCE_CONFIRMED`와 `VISUALLY_READ`는 해당 실행에
+원본 PDF page나 asset을 명시적으로 전달했을 때만 가능하다. caption을 읽은 상태와 그림
+본체를 본 상태도 분리한다.
+
+### 설치와 자원
+
+Python 3.12와 [uv](https://docs.astral.sh/uv/)가 필요하다. 저장소에서 다음을 실행한다.
+
+```bash
+uv sync --extra mineru --extra test
+uv run paper-record doctor
+```
+
+첫 실행 전에 모델을 명시적으로 받을 수도 있다.
+
+```bash
+uv run --extra mineru mineru-models-download --source auto --model_type all
+```
+
+MinerU 공식 요구사항은 local hybrid/pipeline 계열에 RAM 최소 16 GB(32 GB 권장), SSD 여유
+20 GB 이상을 제시한다. macOS는 14 이상이 필요하며 Apple Silicon에서 가속을 시도한다.
+macOS Docker 배포는 가속 장치를 쓸 수 없어 권장되지 않는다. 첫 모델 다운로드에는
+네트워크와 수 GB 이상의 추가 cache가 필요하고, 긴 논문의 `hybrid-engine/high` 처리는
+수 분 이상 걸릴 수 있다. 자세한 최신 값은
+[MinerU quick start](https://github.com/opendatalab/MinerU/blob/master/docs/en/quick_start/index.md)와
+[model source 문서](https://github.com/opendatalab/MinerU/blob/master/docs/en/usage/model_source.md)를
+확인한다.
+
+### 전체 사용 흐름
+
+```bash
+# 01 + 02 + 빈 03 scaffold 생성. 기본 위치: papers/<pdf-stem>/
+paper-record ingest /path/to/paper.pdf
+paper-record ingest /path/to/paper.pdf --id smith-2026 --root papers
+
+# 두 Markdown과 현재 03을 읽되 canonical은 변경하지 않고 proposal만 생성
+paper-record read papers/smith-2026 --provider codex \
+  --purpose "Initial full-paper reading"
+paper-record read papers/smith-2026 --provider claude --model <model>
+
+# 전체 승인 또는 대화형 전체 거절 → 항목별 accept/reject/feedback
+paper-record review papers/smith-2026 --read-id READ-0001
+paper-record review papers/smith-2026 --read-id READ-0001 --approve-all
+
+# unresolved 항목에 한해서만 원본 page/asset을 명시적으로 공급
+paper-record resolve papers/smith-2026 UNRESOLVED-0001 --pages 7-8
+paper-record resolve papers/smith-2026 UNRESOLVED-0001 \
+  --assets assets/tables/table_002.png
+
+paper-record status papers/smith-2026
+```
+
+`read`는 `manifest.yaml`, `01_native.md`, `02_structured.md`, 현재 `03_canonical.md`를
+provider에 보낸다. `--pages`/`--assets`를 사용한 경우 선택한 이미지도 함께 전송한다.
+긴 입력은 양쪽 page marker를 기준으로 전 페이지를 배치 처리하며 자르지 않는다. Codex와
+Claude CLI의 기존 로그인을 사용하고 자격 증명은 저장하지 않는다. provider에는 read-only,
+비대화형, 임시 세션 옵션을 적용하지만, 외부 API를 사용하는 경우 전송된 논문 내용은 해당
+provider의 보존·개인정보 정책을 따른다.
+
+proposal은 `.paper-record/reviews/READ-NNNN/`에 보존된다. `review` 전에는 03이 바뀌지
+않으며, 승인된 항목과 Reading Ledger 한 건만 원자적으로 반영된다. 전부 거절해도 “읽고
+검토했음”은 ledger에 남는다. 이후 PDF/parser revision 또는 canonical version/input hash가
+달라지면 예전 proposal은 stale로 거부된다. 실패한 parser revision과 LLM 응답도 삭제하지
+않으므로 원인을 고친 뒤 같은 명령을 재실행할 수 있다.
+
+운영 로그는 `.paper-record/logs/events.jsonl`의 append-only JSON 객체다. 단계, 시각,
+상태, revision/version, artifact path/hash를 기록하되 prompt, 논문 본문, API key/token,
+환경변수는 기록하지 않거나 redaction한다. `03_canonical.md`의 `Canonical Notes` marker
+사이에 적은 사용자 메모는 machine update 후에도 유지된다.
+
+현재 v1은 parser 중 정답 자동 선택, 외부 문헌 fact-checking, vector DB/RAG, ingest 중
+자동 그림 해석, PDF를 대체하는 canonical, 무인 공개를 하지 않는다. MinerU 결과의 page
+marker는 content-list anchor에 기반한 best-effort이며 복잡한 layout은 원본 visual로
+재확인해야 한다.
+
+## 기존 macOS 도구 요구 사항
 
 - macOS (`pmset`, `osascript` 사용)
 - zsh

@@ -12,6 +12,7 @@ from .ingest import ingest_native
 from .manifest import load_manifest
 from .reading import read_paper
 from .review import apply_review, approve_all, load_proposal, regenerate_item
+from .resolution import resolve_unresolved
 from .schema import SCHEMAS
 from .structured import MinerURunner, ingest_structured, structured_is_identical
 from .util import slugify
@@ -51,7 +52,9 @@ def build_parser() -> argparse.ArgumentParser:
     _add_provider_options(resolve)
     resolve.add_argument("paper_dir", type=Path)
     resolve.add_argument("unresolved_id")
-    resolve.set_defaults(handler=_not_implemented)
+    resolve.add_argument("--pages")
+    resolve.add_argument("--assets", nargs="*", default=[])
+    resolve.set_defaults(handler=_resolve)
 
     review = commands.add_parser("review", help="review and apply an LLM proposal")
     review.add_argument("paper_dir", type=Path)
@@ -165,6 +168,24 @@ def _review(args: argparse.Namespace) -> int:
         return 1
     print(f"canonical updated from {read_id}")
     print(path)
+    return 0
+
+
+def _resolve(args: argparse.Namespace) -> int:
+    try:
+        read_id, proposal = resolve_unresolved(
+            args.paper_dir,
+            args.unresolved_id,
+            pages=args.pages,
+            assets=args.assets,
+            provider_name=args.provider,
+            model=args.model,
+        )
+    except (OSError, RuntimeError, ValueError) as error:
+        print(f"paper-record: resolve failed: {error}", file=sys.stderr)
+        return 1
+    print(f"resolution proposal created: {read_id}")
+    print(proposal)
     return 0
 
 

@@ -17,6 +17,22 @@ class FakeProvider:
         return ProviderResult(self.proposal, self.name, model, "fake 1.0")
 
 
+class EmptyBatchProvider:
+    name = "codex"
+
+    def __init__(self):
+        self.prompts = []
+
+    def run(self, *, prompt, schema, paper_dir, images, model):
+        self.prompts.append(prompt)
+        proposal = {
+            "reading": {"purpose": "batch", "result": "batch read"},
+            "operations": [],
+            "evidence_requests": [],
+        }
+        return ProviderResult(proposal, self.name, model, "fake 1.0")
+
+
 def valid_proposal():
     return {
         "reading": {"purpose": "Initial", "result": "Reviewed both text records"},
@@ -109,3 +125,20 @@ def test_read_renders_explicit_pdf_pages_as_visual_receipts(tmp_path: Path) -> N
     visuals = [item for item in envelope["receipts"] if item["kind"] == "visual"]
     assert len(visuals) == 1
     assert visuals[0]["path"].endswith("inputs/page_0001.png")
+
+
+def test_long_read_batches_every_aligned_page_without_truncation(
+    tmp_path: Path, monkeypatch
+) -> None:
+    paper = paper_record(tmp_path)
+    pages = "".join(f"<!-- PAGE: {number} -->\n" + (str(number) * 700) + "\n" for number in range(1, 7))
+    (paper / "01_native.md").write_text("native header\n" + pages, encoding="utf-8")
+    (paper / "02_structured.md").write_text("structured header\n" + pages, encoding="utf-8")
+    monkeypatch.setattr("paper_record.reading.MAX_INPUT_CHARS", 3500)
+    provider = EmptyBatchProvider()
+    _, proposal_path = read_paper(paper, provider=provider)
+    envelope = __import__("json").loads(proposal_path.read_text())
+    covered = [page for batch in envelope["batches"] for page in batch["pages"]]
+    assert covered == list(range(1, 7))
+    assert len(provider.prompts) == len(envelope["batches"]) > 1
+    assert all(len(prompt) <= 3500 for prompt in provider.prompts)

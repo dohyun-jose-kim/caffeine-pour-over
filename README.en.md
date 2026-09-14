@@ -6,7 +6,95 @@ Hand-crafted macOS CLI tools. `install.sh` symlinks the scripts under `bin/` int
 
 > Hand-crafted macOS CLI tools — **nosleep** (time-boxed sleep blocker with auto-revert), **after** (run a keystroke after a delay), and **pourover** (an interactive menu launcher for them).
 
-## Requirements
+## paper-record: Three-Layer Paper Records
+
+`paper-record` does not collapse a PDF into one parser's answer. It keeps the original as the
+scientific source of truth, preserves two independent representations, and builds a cumulative
+record only from human-approved LLM proposals.
+
+```text
+paper.pdf                 authoritative original evidence
+├── 01_native.md          PyMuPDF4LLM text-layer preservation
+├── 02_structured.md      MinerU Hybrid structure/layout preservation
+└── 03_canonical.md       approved cumulative working record
+```
+
+Parser agreement means `CROSS_CHECKED`, not proven true. Conflicts remain `UNRESOLVED`; the
+system never automatically chooses a winner. `SOURCE_CONFIRMED` and `VISUALLY_READ` require an
+original PDF page or asset explicitly supplied to that read. Caption-read and image-body-read
+states remain separate.
+
+### Installation and resources
+
+Python 3.12 and [uv](https://docs.astral.sh/uv/) are required.
+
+```bash
+uv sync --extra mineru --extra test
+uv run paper-record doctor
+```
+
+Models may be downloaded explicitly before the first ingest:
+
+```bash
+uv run --extra mineru mineru-models-download --source auto --model_type all
+```
+
+MinerU's official guidance lists at least 16 GB RAM (32 GB recommended) and 20 GB or more of
+free SSD space for local hybrid/pipeline use. macOS 14 or newer is required, with acceleration
+attempted on Apple Silicon; Docker on macOS is not recommended because it cannot use the expected
+acceleration. The first model download needs network access and several additional GB of cache,
+and `hybrid-engine/high` can take minutes for a long paper. Check the current
+[MinerU quick start](https://github.com/opendatalab/MinerU/blob/master/docs/en/quick_start/index.md)
+and [model source guide](https://github.com/opendatalab/MinerU/blob/master/docs/en/usage/model_source.md).
+
+### Complete workflow
+
+```bash
+# Create 01 + 02 and an empty 03 scaffold; default: papers/<pdf-stem>/
+paper-record ingest /path/to/paper.pdf
+paper-record ingest /path/to/paper.pdf --id smith-2026 --root papers
+
+# Read both Markdown records and current 03; create a proposal without changing canonical
+paper-record read papers/smith-2026 --provider codex \
+  --purpose "Initial full-paper reading"
+paper-record read papers/smith-2026 --provider claude --model <model>
+
+# Approve all, or reject the whole proposal and enter accept/reject/feedback item review
+paper-record review papers/smith-2026 --read-id READ-0001
+paper-record review papers/smith-2026 --read-id READ-0001 --approve-all
+
+# Explicitly supply original evidence for one unresolved item
+paper-record resolve papers/smith-2026 UNRESOLVED-0001 --pages 7-8
+paper-record resolve papers/smith-2026 UNRESOLVED-0001 \
+  --assets assets/tables/table_002.png
+
+paper-record status papers/smith-2026
+```
+
+`read` sends `manifest.yaml`, `01_native.md`, `02_structured.md`, and the current
+`03_canonical.md` to the provider. Images selected by `--pages` or `--assets` are sent too. Long
+inputs are split on aligned page markers with complete coverage and no silent truncation. Codex
+and Claude use their existing CLI authentication; credentials are not persisted. The adapters use
+read-only, noninteractive, ephemeral options, but material sent to an external API remains subject
+to that provider's retention and privacy policy.
+
+Proposals live under `.paper-record/reviews/READ-NNNN/`. Reading never changes 03. Review applies
+only accepted items plus one Reading Ledger entry via an atomic replacement. A fully rejected
+read still records that the read and review happened. A changed PDF/parser revision, canonical
+version, or input hash makes an older proposal stale. Failed parser revisions and rejected/invalid
+LLM responses remain inspectable and can be retried after correcting the cause.
+
+Operational events are append-only JSON objects in `.paper-record/logs/events.jsonl`. They record
+stages, timestamps, status, revisions/versions, and artifact paths/hashes, while prompts, paper
+bodies, API keys/tokens, credentials, and environment values are omitted or redacted. User text
+between the `Canonical Notes` markers survives machine-managed updates.
+
+Version 1 does not automatically choose the correct parser, fact-check against outside literature,
+build vector/RAG indexes, interpret figures during ingest, replace the PDF with canonical, or
+publish paper contents unattended. Structured page markers are best-effort anchors from MinerU's
+content list; verify complex layouts against original visual evidence.
+
+## Existing macOS tool requirements
 
 - macOS (uses `pmset`, `osascript`)
 - zsh

@@ -2,6 +2,9 @@ from pathlib import Path
 
 from paper_record.ingest import ingest_native
 from paper_record.manifest import load_manifest
+from paper_record.native import PyMuPDF4LLMExtractor, render_native
+
+from .fixtures import representative_scientific_pdf
 
 
 class FakeExtractor:
@@ -89,3 +92,17 @@ def test_failed_native_revision_is_resumed(tmp_path: Path) -> None:
     assert changed
     assert manifest["active_revision"] == "r0001"
     assert (paper_dir / ".paper-record" / "revisions" / "r0001").exists()
+
+
+def test_real_native_fixture_preserves_columns_empty_page_and_equation(tmp_path: Path) -> None:
+    source = representative_scientific_pdf(tmp_path / "representative.pdf")
+    pages, count = PyMuPDF4LLMExtractor().extract(source)
+    markdown, warnings = render_native(
+        pages, revision="r0001", source_sha256="0" * 64, parser_version="test"
+    )
+    assert count == 3
+    assert markdown.count("<!-- PAGE:") == 3
+    assert "1. Methods" in markdown and "2. Results" in markdown
+    assert "Equation 1" in markdown
+    assert "<!-- EMPTY_NATIVE_TEXT -->" in markdown
+    assert warnings == ["page 2 has no native text"]

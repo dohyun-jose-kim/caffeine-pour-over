@@ -256,7 +256,6 @@ wheels = [
 
 [[package]]
 name = "caffeine-paper-record"
-version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "pymupdf4llm" },
@@ -1194,7 +1193,6 @@ dependencies = [
     { name = "torch" },
     { name = "torchvision" },
     { name = "transformers" },
-    { name = "triton", marker = "python_version < '0'" },
     { name = "uvicorn" },
     { name = "xgrammar" },
 ]

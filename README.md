@@ -213,7 +213,7 @@ after --version                  # 버전
 
 ```
 $ nosleep --version
-nosleep (caffeine-pour-over) 1.3.0
+nosleep (caffeine-pour-over) 1.4.0
 ```
 
 `install.sh`가 심볼릭 링크를 걸기 때문에 **저장소의 체크아웃 상태가 곧 설치 버전**이다.
@@ -221,7 +221,7 @@ nosleep (caffeine-pour-over) 1.3.0
 
 ```
 $ nosleep --version
-nosleep (caffeine-pour-over) 1.3.0+dev.aa66d77
+nosleep (caffeine-pour-over) 1.4.0+dev.aa66d77
 ```
 
 `after --version`·`pourover --version`도 같은 형식이며, `pourover` 헤더에도 버전이 뜬다.

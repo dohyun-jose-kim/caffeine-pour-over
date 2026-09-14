@@ -208,7 +208,7 @@ A single line in the `VERSION` file is the source of truth; all three tools read
 
 ```
 $ nosleep --version
-nosleep (caffeine-pour-over) 1.3.0
+nosleep (caffeine-pour-over) 1.4.0
 ```
 
 Because `install.sh` symlinks the scripts, **the repo's checkout state is the installed
@@ -216,7 +216,7 @@ version**. If you check out a commit past the release tag, the version says so.
 
 ```
 $ nosleep --version
-nosleep (caffeine-pour-over) 1.3.0+dev.aa66d77
+nosleep (caffeine-pour-over) 1.4.0+dev.aa66d77
 ```
 
 `after --version` and `pourover --version` use the same format, and `pourover` shows the

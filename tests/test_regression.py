@@ -6,6 +6,7 @@ ROOT = Path(__file__).parents[1]
 
 
 def test_existing_tools_and_paper_record_report_version() -> None:
+    versions = set()
     for name in ("nosleep", "after", "pourover", "paper-record"):
         completed = subprocess.run(
             [str(ROOT / "bin" / name), "--version"],
@@ -15,6 +16,9 @@ def test_existing_tools_and_paper_record_report_version() -> None:
         )
         assert completed.returncode == 0, completed.stderr
         assert name in completed.stdout
+        assert "1.4.0" in completed.stdout
+        versions.add(completed.stdout.strip().split()[-1])
+    assert len(versions) == 1
 
 
 def test_install_script_still_links_every_bin_tool_without_executing_privileged_steps() -> None:

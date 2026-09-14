@@ -5,7 +5,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import __version__
+from . import display_version
 from .canonical import ensure_canonical_scaffold
 from .doctor import run_checks
 from .ingest import ingest_native
@@ -23,7 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="paper-record",
         description="Build and maintain three-layer scientific paper records.",
     )
-    parser.add_argument("--version", action="version", version=f"paper-record {__version__}")
+    parser.add_argument("--version", action="version", version=f"paper-record {display_version()}")
     commands = parser.add_subparsers(dest="command", required=True)
 
     doctor = commands.add_parser("doctor", help="check local parser and LLM prerequisites")

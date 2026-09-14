@@ -10,6 +10,8 @@ from .doctor import run_checks
 from .ingest import ingest_native
 from .manifest import load_manifest
 from .schema import SCHEMAS
+from .structured import MinerURunner, ingest_structured, structured_is_identical
+from .util import slugify
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -78,15 +80,23 @@ def _schema(args: argparse.Namespace) -> int:
 
 def _ingest(args: argparse.Namespace) -> int:
     try:
-        paper_dir, manifest, changed = ingest_native(args.pdf, args.root, args.paper_id)
+        runner = MinerURunner()
+        current_id = slugify(args.paper_id or args.pdf.stem)
+        current = load_manifest(args.root.expanduser().resolve() / current_id)
+        force_new = bool(current and current.get("revision_status") == "COMPLETE" and not structured_is_identical(current, runner))
+        paper_dir, manifest, native_changed = ingest_native(
+            args.pdf, args.root, args.paper_id, force_new=force_new
+        )
+        manifest, structured_changed = ingest_structured(paper_dir, runner)
     except (OSError, RuntimeError, ValueError) as error:
         print(f"paper-record: ingest failed: {error}", file=sys.stderr)
         return 1
-    action = "created" if changed else "unchanged"
+    action = "created" if native_changed or structured_changed else "unchanged"
     print(f"{action}: {paper_dir}")
     print(
         f"revision={manifest['active_revision']} status={manifest['revision_status']} "
-        f"native={manifest['parsers']['native']['status']}"
+        f"native={manifest['parsers']['native']['status']} "
+        f"structured={manifest['parsers']['structured']['status']}"
     )
     return 0
 

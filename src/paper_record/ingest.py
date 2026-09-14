@@ -21,6 +21,7 @@ def ingest_native(
     root: Path,
     paper_id: str | None = None,
     extractor: NativeExtractor | None = None,
+    force_new: bool = False,
 ) -> tuple[Path, dict[str, Any], bool]:
     source = pdf.expanduser().resolve()
     if not source.is_file() or source.suffix.lower() != ".pdf":
@@ -35,7 +36,7 @@ def ingest_native(
     implementation = extractor or PyMuPDF4LLMExtractor()
     source_hash = sha256_file(source)
     current = load_manifest(paper_dir)
-    if current and _native_is_identical(current, source_hash, implementation.version):
+    if current and not force_new and _native_is_identical(current, source_hash, implementation.version):
         log.event(
             "COMMAND_COMPLETED",
             "NO_OP",

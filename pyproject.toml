@@ -1,0 +1,34 @@
+[project]
+name = "caffeine-paper-record"
+version = "0.1.0"
+description = "Three-layer PDF reading records for Codex and Claude"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "pymupdf4llm>=0.2.0",
+]
+
+[project.optional-dependencies]
+mineru = ["mineru[all]>=2.7.0"]
+test = ["pytest>=8.0"]
+
+[project.scripts]
+paper-record = "paper_record.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/paper_record"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+  "mineru: requires a local MinerU installation and model files",
+  "live_llm: spends provider tokens and requires authentication",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100

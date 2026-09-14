@@ -1,0 +1,6 @@
+#!/bin/zsh
+# paper-record — three-layer PDF reading records
+set -eu
+
+ROOT=${0:A:h:h}
+exec uv run --project "$ROOT" --frozen paper-record "$@"

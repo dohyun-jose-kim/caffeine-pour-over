@@ -7,6 +7,8 @@ from pathlib import Path
 
 from . import __version__
 from .doctor import run_checks
+from .ingest import ingest_native
+from .manifest import load_manifest
 from .schema import SCHEMAS
 
 
@@ -30,7 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
     ingest.add_argument("pdf", type=Path)
     ingest.add_argument("--id", dest="paper_id")
     ingest.add_argument("--root", type=Path, default=Path("papers"))
-    ingest.set_defaults(handler=_not_implemented)
+    ingest.set_defaults(handler=_ingest)
 
     read = commands.add_parser("read", help="ask an LLM for a canonical reading proposal")
     _add_provider_options(read)
@@ -53,7 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     status = commands.add_parser("status", help="show parser, revision, and canonical status")
     status.add_argument("paper_dir", type=Path)
-    status.set_defaults(handler=_not_implemented)
+    status.set_defaults(handler=_status)
     return parser
 
 
@@ -71,6 +73,30 @@ def _doctor(args: argparse.Namespace) -> int:
 
 def _schema(args: argparse.Namespace) -> int:
     print(json.dumps(SCHEMAS[args.name], ensure_ascii=False, indent=2))
+    return 0
+
+
+def _ingest(args: argparse.Namespace) -> int:
+    try:
+        paper_dir, manifest, changed = ingest_native(args.pdf, args.root, args.paper_id)
+    except (OSError, RuntimeError, ValueError) as error:
+        print(f"paper-record: ingest failed: {error}", file=sys.stderr)
+        return 1
+    action = "created" if changed else "unchanged"
+    print(f"{action}: {paper_dir}")
+    print(
+        f"revision={manifest['active_revision']} status={manifest['revision_status']} "
+        f"native={manifest['parsers']['native']['status']}"
+    )
+    return 0
+
+
+def _status(args: argparse.Namespace) -> int:
+    manifest = load_manifest(args.paper_dir.expanduser().resolve())
+    if manifest is None:
+        print(f"paper-record: no manifest in {args.paper_dir}", file=sys.stderr)
+        return 1
+    print(json.dumps(manifest, ensure_ascii=False, indent=2))
     return 0
 
 

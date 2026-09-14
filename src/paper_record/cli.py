@@ -6,9 +6,11 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from .canonical import ensure_canonical_scaffold
 from .doctor import run_checks
 from .ingest import ingest_native
 from .manifest import load_manifest
+from .reading import read_paper
 from .schema import SCHEMAS
 from .structured import MinerURunner, ingest_structured, structured_is_identical
 from .util import slugify
@@ -42,7 +44,7 @@ def build_parser() -> argparse.ArgumentParser:
     read.add_argument("--purpose", default="Initial full-paper reading")
     read.add_argument("--pages")
     read.add_argument("--assets", nargs="*", default=[])
-    read.set_defaults(handler=_not_implemented)
+    read.set_defaults(handler=_read)
 
     resolve = commands.add_parser("resolve", help="inspect evidence for an unresolved item")
     _add_provider_options(resolve)
@@ -88,6 +90,7 @@ def _ingest(args: argparse.Namespace) -> int:
             args.pdf, args.root, args.paper_id, force_new=force_new
         )
         manifest, structured_changed = ingest_structured(paper_dir, runner)
+        ensure_canonical_scaffold(paper_dir)
     except (OSError, RuntimeError, ValueError) as error:
         print(f"paper-record: ingest failed: {error}", file=sys.stderr)
         return 1
@@ -107,6 +110,24 @@ def _status(args: argparse.Namespace) -> int:
         print(f"paper-record: no manifest in {args.paper_dir}", file=sys.stderr)
         return 1
     print(json.dumps(manifest, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _read(args: argparse.Namespace) -> int:
+    try:
+        read_id, proposal = read_paper(
+            args.paper_dir,
+            provider_name=args.provider,
+            model=args.model,
+            purpose=args.purpose,
+            pages=args.pages,
+            assets=args.assets,
+        )
+    except (OSError, RuntimeError, ValueError) as error:
+        print(f"paper-record: read failed: {error}", file=sys.stderr)
+        return 1
+    print(f"proposal created: {read_id}")
+    print(proposal)
     return 0
 
 

@@ -134,7 +134,7 @@ PROPOSAL_SCHEMA: dict[str, Any] = {
     "properties": {
         "reading": {
             "type": "object",
-            "additionalProperties": True,
+            "additionalProperties": False,
             "required": ["purpose", "result"],
             "properties": {
                 "purpose": {"type": "string"},
@@ -159,13 +159,23 @@ PROPOSAL_SCHEMA: dict[str, Any] = {
                     "item_id": {"type": "string", "minLength": 1},
                     "action": {"enum": sorted(ACTIONS)},
                     "target": {"enum": sorted(TARGETS)},
-                    "content": {},
+                    "content": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "required": ["title", "body", "value", "unit"],
+                        "properties": {
+                            "title": {"type": ["string", "null"]},
+                            "body": {"type": "string"},
+                            "value": {"type": ["string", "null"]},
+                            "unit": {"type": ["string", "null"]},
+                        },
+                    },
                     "provenance": {
                         "type": "array",
                         "items": {
                             "type": "object",
-                            "additionalProperties": True,
-                            "required": ["source"],
+                            "additionalProperties": False,
+                            "required": ["source", "page", "locator", "excerpt"],
                             "properties": {
                                 "source": {"type": "string"},
                                 "page": {"type": ["integer", "null"]},
@@ -183,8 +193,8 @@ PROPOSAL_SCHEMA: dict[str, Any] = {
             "type": "array",
             "items": {
                 "type": "object",
-                "additionalProperties": True,
-                "required": ["reason"],
+                "additionalProperties": False,
+                "required": ["reason", "page", "asset"],
                 "properties": {
                     "reason": {"type": "string"},
                     "page": {"type": ["integer", "null"]},

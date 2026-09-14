@@ -7,5 +7,5 @@ def test_schema_command(capsys) -> None:
 
 
 def test_future_command_has_explicit_exit(capsys, tmp_path) -> None:
-    assert main(["read", str(tmp_path)]) == 2
+    assert main(["resolve", str(tmp_path), "UNRESOLVED-0001"]) == 2
     assert "not implemented yet" in capsys.readouterr().err

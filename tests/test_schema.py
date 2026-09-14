@@ -8,8 +8,10 @@ def operation(**changes):
         "item_id": "CLAIM-0001",
         "action": "upsert",
         "target": "claims",
-        "content": {"claim": "Example"},
-        "provenance": [{"source": "01_native.md", "page": 1}],
+        "content": {"title": None, "body": "Example", "value": None, "unit": None},
+        "provenance": [
+            {"source": "01_native.md", "page": 1, "locator": None, "excerpt": None}
+        ],
         "read_status": "TEXT_READ",
         "evidence_status": "NOT_CHECKED",
     }
@@ -44,7 +46,10 @@ def test_visual_status_requires_visual_receipt() -> None:
 def test_cross_checked_accepts_two_sources() -> None:
     op = operation(
         evidence_status="CROSS_CHECKED",
-        provenance=[{"source": "01_native.md"}, {"source": "02_structured.md"}],
+        provenance=[
+            {"source": "01_native.md", "page": 1, "locator": None, "excerpt": None},
+            {"source": "02_structured.md", "page": None, "locator": "Results", "excerpt": None},
+        ],
     )
     validate_proposal(
         proposal(op),

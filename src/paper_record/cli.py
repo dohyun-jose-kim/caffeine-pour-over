@@ -11,6 +11,7 @@ from .doctor import run_checks
 from .ingest import ingest_native
 from .manifest import load_manifest
 from .reading import read_paper
+from .review import apply_review, approve_all, load_proposal, regenerate_item
 from .schema import SCHEMAS
 from .structured import MinerURunner, ingest_structured, structured_is_identical
 from .util import slugify
@@ -55,7 +56,12 @@ def build_parser() -> argparse.ArgumentParser:
     review = commands.add_parser("review", help="review and apply an LLM proposal")
     review.add_argument("paper_dir", type=Path)
     review.add_argument("--read-id")
-    review.set_defaults(handler=_not_implemented)
+    review.add_argument("--approve-all", action="store_true")
+    review.add_argument(
+        "--decisions", type=Path, help="JSON decision array for noninteractive review"
+    )
+    _add_provider_options(review)
+    review.set_defaults(handler=_review)
 
     status = commands.add_parser("status", help="show parser, revision, and canonical status")
     status.add_argument("paper_dir", type=Path)
@@ -129,6 +135,95 @@ def _read(args: argparse.Namespace) -> int:
     print(f"proposal created: {read_id}")
     print(proposal)
     return 0
+
+
+def _review(args: argparse.Namespace) -> int:
+    paper_dir = args.paper_dir.expanduser().resolve()
+    try:
+        read_id = args.read_id or _latest_read_id(paper_dir)
+        _, envelope = load_proposal(paper_dir, read_id)
+        print(json.dumps(envelope["proposal"], ensure_ascii=False, indent=2))
+        if args.approve_all:
+            decisions = approve_all(envelope)
+        elif args.decisions:
+            decisions = json.loads(args.decisions.read_text(encoding="utf-8"))
+        elif _yes("Approve the whole proposal? [y/N] "):
+            decisions = approve_all(envelope)
+        else:
+            decisions = _item_review(
+                paper_dir, read_id, envelope, provider=args.provider, model=args.model
+            )
+        accepted = sum(item["decision"] == "ACCEPTED" for item in decisions)
+        rejected = sum(item["decision"] == "REJECTED" for item in decisions)
+        print(f"Final review summary: accepted={accepted} rejected={rejected}")
+        if not args.approve_all and not args.decisions and not _yes("Apply this review? [y/N] "):
+            print("review not applied")
+            return 0
+        path = apply_review(paper_dir, read_id, decisions)
+    except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as error:
+        print(f"paper-record: review failed: {error}", file=sys.stderr)
+        return 1
+    print(f"canonical updated from {read_id}")
+    print(path)
+    return 0
+
+
+def _latest_read_id(paper_dir: Path) -> str:
+    reviews = paper_dir / ".paper-record" / "reviews"
+    ids = sorted(
+        path.name
+        for path in reviews.glob("READ-[0-9][0-9][0-9][0-9]")
+        if (path / "proposal.json").exists()
+    )
+    if not ids:
+        raise ValueError("no reading proposal exists")
+    return ids[-1]
+
+
+def _yes(prompt: str) -> bool:
+    return input(prompt).strip().lower() in {"y", "yes"}
+
+
+def _item_review(
+    paper_dir: Path,
+    read_id: str,
+    envelope: dict,
+    *,
+    provider: str,
+    model: str | None,
+) -> list[dict[str, str | None]]:
+    decisions: list[dict[str, str | None]] = []
+    for original in envelope["proposal"]["operations"]:
+        item = original
+        while True:
+            print(json.dumps(item, ensure_ascii=False, indent=2))
+            choice = input("Accept, reject, or feedback? [a/r/f] ").strip().lower()
+            if choice in {"a", "accept"}:
+                decisions.append(
+                    {"item_id": item["item_id"], "decision": "ACCEPTED", "feedback": None}
+                )
+                break
+            if choice in {"r", "reject"}:
+                decisions.append(
+                    {"item_id": item["item_id"], "decision": "REJECTED", "feedback": None}
+                )
+                break
+            if choice in {"f", "feedback"}:
+                feedback = input("Feedback for this item: ").strip()
+                if not feedback:
+                    print("Feedback cannot be empty.")
+                    continue
+                item = regenerate_item(
+                    paper_dir,
+                    read_id,
+                    item["item_id"],
+                    feedback,
+                    provider_name=provider,
+                    model=model,
+                )
+                continue
+            print("Enter a, r, or f.")
+    return decisions
 
 
 def _not_implemented(args: argparse.Namespace) -> int:

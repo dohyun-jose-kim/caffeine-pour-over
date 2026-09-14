@@ -84,7 +84,7 @@ CANONICAL_STATE_SCHEMA: dict[str, Any] = {
     "type": "object",
     "required": [
         "schema_version", "canonical_version", "identity", "summary", "structure",
-        "claims", "figures", "tables", "equations", "conflicts", "unresolved", "ledger",
+        "claims", "figures", "tables", "equations", "conflicts", "unresolved", "notes", "ledger",
     ],
     "properties": {
         "schema_version": {"const": 1},
@@ -98,6 +98,7 @@ CANONICAL_STATE_SCHEMA: dict[str, Any] = {
         "equations": {"type": "array"},
         "conflicts": {"type": "array"},
         "unresolved": {"type": "array"},
+        "notes": {"type": "array"},
         "ledger": {"type": "array"},
     },
 }
@@ -207,8 +208,15 @@ PROPOSAL_SCHEMA: dict[str, Any] = {
 
 
 def validate_proposal(proposal: dict[str, Any], receipts: list[dict[str, Any]]) -> None:
+    expected_top_level = {"reading", "operations", "evidence_requests"}
+    if not isinstance(proposal, dict) or set(proposal) != expected_top_level:
+        raise ValueError("proposal has unexpected or missing top-level fields")
     if not isinstance(proposal.get("reading"), dict):
         raise ValueError("proposal.reading must be an object")
+    if set(proposal["reading"]) != {"purpose", "result"} or not all(
+        isinstance(proposal["reading"].get(key), str) for key in ("purpose", "result")
+    ):
+        raise ValueError("proposal.reading is malformed")
     if not isinstance(proposal.get("operations"), list):
         raise ValueError("proposal.operations must be an array")
     if not isinstance(proposal.get("evidence_requests"), list):
@@ -218,13 +226,21 @@ def validate_proposal(proposal: dict[str, Any], receipts: list[dict[str, Any]]) 
     visual_paths = {item["path"] for item in receipts if item.get("kind") == "visual"}
     seen: set[str] = set()
     for operation in proposal["operations"]:
+        if not isinstance(operation, dict):
+            raise ValueError("proposal operation must be an object")
         missing = {
             "item_id", "action", "target", "content", "provenance",
             "read_status", "evidence_status",
         } - operation.keys()
         if missing:
             raise ValueError(f"operation missing fields: {sorted(missing)}")
+        if set(operation) != {
+            "item_id", "action", "target", "content", "provenance", "read_status", "evidence_status"
+        }:
+            raise ValueError("operation has unexpected fields")
         item_id = operation["item_id"]
+        if not isinstance(item_id, str) or not item_id:
+            raise ValueError("operation item_id must be a non-empty string")
         if item_id in seen:
             raise ValueError(f"duplicate operation item_id: {item_id}")
         seen.add(item_id)
@@ -234,6 +250,22 @@ def validate_proposal(proposal: dict[str, Any], receipts: list[dict[str, Any]]) 
             raise ValueError(f"invalid read_status: {item_id}")
         if operation["evidence_status"] not in EVIDENCE_STATUSES:
             raise ValueError(f"invalid evidence_status: {item_id}")
+        content = operation["content"]
+        if not isinstance(content, dict) or set(content) != {"title", "body", "value", "unit"}:
+            raise ValueError(f"malformed operation content: {item_id}")
+        if not isinstance(content["body"], str):
+            raise ValueError(f"operation body must be a string: {item_id}")
+        optional_strings = ("title", "value", "unit")
+        if not all(content[key] is None or isinstance(content[key], str) for key in optional_strings):
+            raise ValueError(f"malformed operation content values: {item_id}")
+        if not isinstance(operation["provenance"], list):
+            raise ValueError(f"operation provenance must be an array: {item_id}")
+        for provenance in operation["provenance"]:
+            provenance_fields = {"source", "page", "locator", "excerpt"}
+            if not isinstance(provenance, dict) or set(provenance) != provenance_fields:
+                raise ValueError(f"malformed provenance: {item_id}")
+            if not isinstance(provenance["source"], str):
+                raise ValueError(f"provenance source must be a string: {item_id}")
         sources = {p.get("source") for p in operation["provenance"]}
         if not sources <= receipt_paths:
             raise ValueError(f"operation cites input that was not provided: {item_id}")
@@ -246,6 +278,9 @@ def validate_proposal(proposal: dict[str, Any], receipts: list[dict[str, Any]]) 
                 raise ValueError(f"SOURCE_CONFIRMED requires provided visual evidence: {item_id}")
         if operation["read_status"] == "VISUALLY_READ" and not (sources & visual_paths):
             raise ValueError(f"VISUALLY_READ requires provided visual evidence: {item_id}")
+    for request in proposal["evidence_requests"]:
+        if not isinstance(request, dict) or set(request) != {"reason", "page", "asset"}:
+            raise ValueError("malformed evidence request")
 
 
 def schema_json() -> str:

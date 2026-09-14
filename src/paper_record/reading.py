@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .audit import AuditLog
+from .canonical import load_canonical
 from .manifest import load_manifest
 from .providers import Provider, get_provider
 from .schema import PROPOSAL_SCHEMA, validate_proposal
@@ -33,6 +34,7 @@ def read_paper(
     canonical = paper_dir / "03_canonical.md"
     if not canonical.exists():
         raise RuntimeError("03_canonical.md is missing; initialize the canonical scaffold first")
+    canonical_state, _ = load_canonical(canonical)
 
     review_root = paper_dir / ".paper-record" / "reviews"
     existing = [entry.name for entry in review_root.iterdir()] if review_root.exists() else []
@@ -88,7 +90,7 @@ def read_paper(
             "requested_model": result.requested_model,
             "provider_cli_version": result.cli_version,
             "base_revision": manifest["active_revision"],
-            "base_canonical_version": manifest["canonical"]["version"],
+            "base_canonical_version": canonical_state["canonical_version"],
             "receipts": receipts,
             "proposal": result.proposal,
         }
